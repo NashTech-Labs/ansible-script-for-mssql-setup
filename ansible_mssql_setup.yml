@@ -1,0 +1,81 @@
+---
+- name: Secure MSSQL Database Server
+  hosts: mssql-server
+  become: true
+
+  tasks:
+    # Update packages based on the OS family
+    - name: Update packages (RedHat)
+      package:
+        name: '*'
+        state: latest
+      when: ansible_os_family == 'RedHat'
+
+    - name: Update packages (Debian)
+      apt:
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+
+    # Ensure firewall service is running and enable necessary ports
+    - name: Ensure firewall service is running and enable ports
+      service:
+        name: '{{ item }}'
+        state: started
+        enabled: true
+      loop:
+        - firewalld
+        - ufw
+      when: ansible_os_family == 'RedHat' or ansible_os_family == 'Debian'
+
+    # Ensure MSSQL and SSH ports are allowed in the firewall
+    - name: Ensure MSSQL and SSH ports are allowed
+      firewalld:
+        service: '{{ item }}'
+        permanent: true
+        state: enabled
+        immediate: true
+      loop:
+        - mssql
+        - ssh
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure OpenSSH and MSSQL ports are allowed
+      ufw:
+        rule: '{{ item }}'
+        state: enabled
+      loop:
+        - allow OpenSSH
+        - allow mssql
+      when: ansible_os_family == 'Debian'
+
+    # Install MSSQL server and required tools
+    - name: Install MSSQL server and tools
+      package:
+        name:
+          - mssql-server
+          - mssql-tools
+          - msodbcsql17
+          - mssql-server-agent
+        state: present
+      when: ansible_os_family == 'RedHat' or ansible_os_family == 'Debian'
+
+    # Configure MSSQL Database
+    - name: Configure MSSQL Database
+      mssql_db:
+        name: 'MyDatabase'
+        collation: SQL_Latin1_General_CP1_CI_AS
+        state: present
+      when: ansible_os_family == 'RedHat' or ansible_os_family == 'Debian'
+
+    # Secure MSSQL Server by disabling remote access and certain features
+    - name: Secure MSSQL Server
+      mssql_conf:
+        options:
+          - name: 'remote access'
+            value: 'disabled'
+          - name: 'default trace enabled'
+            value: 'disabled'
+          - name: 'xp_cmdshell'
+            value: 'disabled'
+        state: present
+      when: ansible_os_family == 'RedHat' or ansible_os_family == 'Debian'
